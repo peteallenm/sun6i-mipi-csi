@@ -58,7 +58,6 @@ bool sun6i_csi_is_format_supported(struct sun6i_csi *csi,
 	     || sdev->csi.v4l2_ep.bus_type == V4L2_MBUS_BT656)
 	     && sdev->csi.v4l2_ep.bus.parallel.bus_width == 16) {
 		switch (pixformat) {
-		case V4L2_PIX_FMT_HM12:
 		case V4L2_PIX_FMT_NV12:
 		case V4L2_PIX_FMT_NV21:
 		case V4L2_PIX_FMT_NV16:
@@ -73,13 +72,13 @@ bool sun6i_csi_is_format_supported(struct sun6i_csi *csi,
 			case MEDIA_BUS_FMT_YVYU8_1X16:
 				return true;
 			default:
-				dev_dbg(sdev->dev, "Unsupported mbus code: 0x%x\n",
+				dev_dbg(sdev->dev, "Unsupported mbus code: 0x%x H8\n",
 					mbus_code);
 				break;
 			}
 			break;
 		default:
-			dev_dbg(sdev->dev, "Unsupported pixformat: 0x%x\n",
+			dev_dbg(sdev->dev, "Unsupported pixformat: 0x%x H9\n",
 				pixformat);
 			break;
 		}
@@ -121,7 +120,6 @@ bool sun6i_csi_is_format_supported(struct sun6i_csi *csi,
 	case V4L2_PIX_FMT_VYUY:
 		return (mbus_code == MEDIA_BUS_FMT_VYUY8_2X8);
 
-	case V4L2_PIX_FMT_HM12:
 	case V4L2_PIX_FMT_NV12:
 	case V4L2_PIX_FMT_NV21:
 	case V4L2_PIX_FMT_NV16:
@@ -136,7 +134,7 @@ bool sun6i_csi_is_format_supported(struct sun6i_csi *csi,
 		case MEDIA_BUS_FMT_YVYU8_2X8:
 			return true;
 		default:
-			dev_dbg(sdev->dev, "Unsupported mbus code: 0x%x\n",
+			dev_dbg(sdev->dev, "Unsupported mbus code: 0x%x H7\n",
 				mbus_code);
 			break;
 		}
@@ -151,7 +149,7 @@ bool sun6i_csi_is_format_supported(struct sun6i_csi *csi,
 		return (mbus_code == MEDIA_BUS_FMT_JPEG_1X8);
 
 	default:
-		dev_dbg(sdev->dev, "Unsupported pixformat: 0x%x\n", pixformat);
+		dev_dbg(sdev->dev, "Unsupported pixformat: 0x%x H10\n", pixformat);
 		break;
 	}
 
@@ -214,21 +212,27 @@ clk_mod_disable:
 static enum csi_input_fmt get_csi_input_format(struct sun6i_csi_dev *sdev,
 					       u32 mbus_code, u32 pixformat)
 {
+    dev_warn(sdev->dev, "%s(%d): csi1: \n", __func__, __LINE__);
 	/* non-YUV */
 	if ((mbus_code & 0xF000) != 0x2000)
+    {
+        dev_warn(sdev->dev, "%s(%d): csi1: Non YUV format\n", __func__, __LINE__);
 		return CSI_INPUT_FORMAT_RAW;
+    }
 
 	switch (pixformat) {
 	case V4L2_PIX_FMT_YUYV:
 	case V4L2_PIX_FMT_YVYU:
 	case V4L2_PIX_FMT_UYVY:
 	case V4L2_PIX_FMT_VYUY:
+        dev_warn(sdev->dev, "%s(%d): csi1: Raw pix\n", __func__, __LINE__);
 		return CSI_INPUT_FORMAT_RAW;
 	default:
 		break;
 	}
 
 	/* not support YUV420 input format yet */
+    dev_warn(sdev->dev, "%s(%d): csi1: Select YUYV422 as default \n", __func__, __LINE__);
 	dev_dbg(sdev->dev, "Select YUV422 as default input format of CSI.\n");
 	return CSI_INPUT_FORMAT_YUV422;
 }
@@ -237,7 +241,7 @@ static enum csi_output_fmt get_csi_output_format(struct sun6i_csi_dev *sdev,
 						 u32 pixformat, u32 field)
 {
 	bool buf_interlaced = false;
-
+dev_warn(sdev->dev, "%s(%d): csi1 \n", __func__, __LINE__);
 	if (field == V4L2_FIELD_INTERLACED
 	    || field == V4L2_FIELD_INTERLACED_TB
 	    || field == V4L2_FIELD_INTERLACED_BT)
@@ -248,6 +252,7 @@ static enum csi_output_fmt get_csi_output_format(struct sun6i_csi_dev *sdev,
 	case V4L2_PIX_FMT_SGBRG8:
 	case V4L2_PIX_FMT_SGRBG8:
 	case V4L2_PIX_FMT_SRGGB8:
+        
 		return buf_interlaced ? CSI_FRAME_RAW_8 : CSI_FIELD_RAW_8;
 	case V4L2_PIX_FMT_SBGGR10:
 	case V4L2_PIX_FMT_SGBRG10:
@@ -264,24 +269,27 @@ static enum csi_output_fmt get_csi_output_format(struct sun6i_csi_dev *sdev,
 	case V4L2_PIX_FMT_YVYU:
 	case V4L2_PIX_FMT_UYVY:
 	case V4L2_PIX_FMT_VYUY:
-		return buf_interlaced ? CSI_FRAME_RAW_8 : CSI_FIELD_RAW_8;
+        dev_warn(sdev->dev, "%s(%d): csi1: PIXFMT Raw8 for UYUV and friends\n", __func__, __LINE__);
+		//return buf_interlaced ? CSI_FRAME_RAW_8 : CSI_FIELD_RAW_8;
+		return buf_interlaced ? CSI_FRAME_RAW_8 : CSI_FIELD_PLANAR_YUV422;
 
-	case V4L2_PIX_FMT_HM12:
-		return buf_interlaced ? CSI_FRAME_MB_YUV420 :
-					CSI_FIELD_MB_YUV420;
 	case V4L2_PIX_FMT_NV12:
 	case V4L2_PIX_FMT_NV21:
+        dev_warn(sdev->dev, "%s(%d): csi1: PIXFMT CSI_FIELD_UV_CB_YUV420 for NV12/NV21\n", __func__, __LINE__);
 		return buf_interlaced ? CSI_FRAME_UV_CB_YUV420 :
 					CSI_FIELD_UV_CB_YUV420;
 	case V4L2_PIX_FMT_YUV420:
 	case V4L2_PIX_FMT_YVU420:
+        dev_warn(sdev->dev, "%s(%d): csi1: PIXFMT CSI_FIELD_PLANAR_YUV420 for YUV420/YVU420\n", __func__, __LINE__);
 		return buf_interlaced ? CSI_FRAME_PLANAR_YUV420 :
 					CSI_FIELD_PLANAR_YUV420;
 	case V4L2_PIX_FMT_NV16:
 	case V4L2_PIX_FMT_NV61:
+        dev_warn(sdev->dev, "%s(%d): csi1: PIXFMT CSI_FIELD_UV_CB_YUV422 for NV16/NV61\n", __func__, __LINE__);
 		return buf_interlaced ? CSI_FRAME_UV_CB_YUV422 :
 					CSI_FIELD_UV_CB_YUV422;
 	case V4L2_PIX_FMT_YUV422P:
+        dev_warn(sdev->dev, "%s(%d): csi1: PIXFMT CSI_FRAME_PLANAR_YUV422 for YUV422P\n", __func__, __LINE__);
 		return buf_interlaced ? CSI_FRAME_PLANAR_YUV422 :
 					CSI_FIELD_PLANAR_YUV422;
 
@@ -293,7 +301,8 @@ static enum csi_output_fmt get_csi_output_format(struct sun6i_csi_dev *sdev,
 		return buf_interlaced ? CSI_FRAME_RAW_8 : CSI_FIELD_RAW_8;
 
 	default:
-		dev_warn(sdev->dev, "Unsupported pixformat: 0x%x\n", pixformat);
+        dev_warn(sdev->dev, "%s(%d): csi1: Unsupported pixformat: 0x%x H1 \n", __func__, __LINE__, pixformat);
+		dev_warn(sdev->dev, "Unsupported pixformat: 0x%x H1\n", pixformat);
 		break;
 	}
 
@@ -303,12 +312,15 @@ static enum csi_output_fmt get_csi_output_format(struct sun6i_csi_dev *sdev,
 static enum csi_input_seq get_csi_input_seq(struct sun6i_csi_dev *sdev,
 					    u32 mbus_code, u32 pixformat)
 {
+    dev_warn(sdev->dev, "%s(%d): csi1\n", __func__, __LINE__);
 	/* Input sequence does not apply to non-YUV formats */
 	if ((mbus_code & 0xF000) != 0x2000)
+    {
+        dev_warn(sdev->dev, "%s(%d): csi1: Doesn't apply to non-yuv\n", __func__, __LINE__);
 		return 0;
+    }
 
 	switch (pixformat) {
-	case V4L2_PIX_FMT_HM12:
 	case V4L2_PIX_FMT_NV12:
 	case V4L2_PIX_FMT_NV16:
 	case V4L2_PIX_FMT_YUV420:
@@ -316,18 +328,23 @@ static enum csi_input_seq get_csi_input_seq(struct sun6i_csi_dev *sdev,
 		switch (mbus_code) {
 		case MEDIA_BUS_FMT_UYVY8_2X8:
 		case MEDIA_BUS_FMT_UYVY8_1X16:
+            dev_warn(sdev->dev, "%s(%d): csi1: UYVY \n", __func__, __LINE__);
 			return CSI_INPUT_SEQ_UYVY;
 		case MEDIA_BUS_FMT_VYUY8_2X8:
 		case MEDIA_BUS_FMT_VYUY8_1X16:
+            dev_warn(sdev->dev, "%s(%d): csi1: VYUY\n", __func__, __LINE__);
 			return CSI_INPUT_SEQ_VYUY;
 		case MEDIA_BUS_FMT_YUYV8_2X8:
 		case MEDIA_BUS_FMT_YUYV8_1X16:
+            dev_warn(sdev->dev, "%s(%d): csi1: YUYV\n", __func__, __LINE__);
 			return CSI_INPUT_SEQ_YUYV;
 		case MEDIA_BUS_FMT_YVYU8_1X16:
 		case MEDIA_BUS_FMT_YVYU8_2X8:
+            dev_warn(sdev->dev, "%s(%d): csi1: YVYU\n", __func__, __LINE__);
 			return CSI_INPUT_SEQ_YVYU;
 		default:
-			dev_warn(sdev->dev, "Unsupported mbus code: 0x%x\n",
+            dev_warn(sdev->dev, "%s(%d): csi1: YUV422 Unsupported\n", __func__, __LINE__);
+			dev_warn(sdev->dev, "Unsupported mbus code: 0x%x H2\n",
 				 mbus_code);
 			break;
 		}
@@ -338,33 +355,49 @@ static enum csi_input_seq get_csi_input_seq(struct sun6i_csi_dev *sdev,
 		switch (mbus_code) {
 		case MEDIA_BUS_FMT_UYVY8_2X8:
 		case MEDIA_BUS_FMT_UYVY8_1X16:
+            dev_warn(sdev->dev, "%s(%d): csi1: NV2161/UYVY\n", __func__, __LINE__);
 			return CSI_INPUT_SEQ_VYUY;
 		case MEDIA_BUS_FMT_VYUY8_2X8:
 		case MEDIA_BUS_FMT_VYUY8_1X16:
+            dev_warn(sdev->dev, "%s(%d): csi1: NV2161/VYUY\n", __func__, __LINE__);
 			return CSI_INPUT_SEQ_UYVY;
 		case MEDIA_BUS_FMT_YUYV8_2X8:
 		case MEDIA_BUS_FMT_YUYV8_1X16:
+            dev_warn(sdev->dev, "%s(%d): csi1: NV2161/YUYV\n", __func__, __LINE__);
 			return CSI_INPUT_SEQ_YVYU;
 		case MEDIA_BUS_FMT_YVYU8_1X16:
 		case MEDIA_BUS_FMT_YVYU8_2X8:
+            dev_warn(sdev->dev, "%s(%d): csi1: NV2161/YVYU\n", __func__, __LINE__);
 			return CSI_INPUT_SEQ_YUYV;
 		default:
-			dev_warn(sdev->dev, "Unsupported mbus code: 0x%x\n",
+            dev_warn(sdev->dev, "%s(%d): csi1: NV2161 Unsupported H3\n", __func__, __LINE__);
+			dev_warn(sdev->dev, "Unsupported mbus code: 0x%xH3\n",
 				 mbus_code);
 			break;
 		}
 		break;
 
 	case V4L2_PIX_FMT_YUYV:
+        dev_warn(sdev->dev, "%s(%d): csi1: V4L2_PIX_FMT_YUYV\n", __func__, __LINE__);
 		return CSI_INPUT_SEQ_YUYV;
+    case V4L2_PIX_FMT_YVYU:
+        dev_warn(sdev->dev, "%s(%d): csi1: V4L2_PIX_FMT_YVYU\n", __func__, __LINE__);
+		return CSI_INPUT_SEQ_YVYU;
+    case V4L2_PIX_FMT_UYVY:
+        dev_warn(sdev->dev, "%s(%d): csi1: V4L2_PIX_FMT_UYVY\n", __func__, __LINE__);
+		return CSI_INPUT_SEQ_UYVY;
+    case V4L2_PIX_FMT_VYUY:
+        dev_warn(sdev->dev, "%s(%d): csi1: V4L2_PIX_FMT_VYUY\n", __func__, __LINE__);
+		return CSI_INPUT_SEQ_VYUY;
 
 	default:
-		dev_warn(sdev->dev, "Unsupported pixformat: 0x%x, defaulting to YUYV\n",
+        dev_warn(sdev->dev, "%s(%d): csi1: Unsupported pixformat\n", __func__, __LINE__);
+		dev_warn(sdev->dev, "Unsupported pixformat: 0x%x, defaulting to UYVY H4\n",
 			 pixformat);
 		break;
 	}
 
-	return CSI_INPUT_SEQ_YUYV;
+	return CSI_INPUT_SEQ_UYVY;
 }
 
 static void sun6i_csi_setup_bus(struct sun6i_csi_dev *sdev)
@@ -435,7 +468,7 @@ static void sun6i_csi_setup_bus(struct sun6i_csi_dev *sdev)
 		sun6i_mipi_setup_bus(csi);
 		break;
 	default:
-		dev_warn(sdev->dev, "Unsupported bus type: %d\n",
+		dev_warn(sdev->dev, "Unsupported bus type: %d H5\n",
 			 endpoint->bus_type);
 		break;
 	}
@@ -528,7 +561,6 @@ static void sun6i_csi_set_window(struct sun6i_csi_dev *sdev)
 
 	planar_offset[0] = 0;
 	switch (config->pixelformat) {
-	case V4L2_PIX_FMT_HM12:
 	case V4L2_PIX_FMT_NV12:
 	case V4L2_PIX_FMT_NV21:
 	case V4L2_PIX_FMT_NV16:
@@ -718,7 +750,7 @@ static int sun6i_csi_fwnode_parse(struct device *dev,
 		csi->v4l2_ep = *vep;
 		return 0;
 	default:
-		dev_err(dev, "Unsupported media bus type\n");
+		dev_err(dev, "Unsupported media bus type H6\n");
 		return -ENOTCONN;
 	}
 }

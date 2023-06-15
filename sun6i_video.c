@@ -13,6 +13,7 @@
 #include <media/v4l2-mc.h>
 #include <media/videobuf2-dma-contig.h>
 #include <media/videobuf2-v4l2.h>
+#include <uapi/linux/videodev2.h>
 
 #include "sun6i_csi.h"
 #include "sun6i_video.h"
@@ -48,7 +49,6 @@ static const u32 supported_pixformats[] = {
 	V4L2_PIX_FMT_YVYU,
 	V4L2_PIX_FMT_UYVY,
 	V4L2_PIX_FMT_VYUY,
-	V4L2_PIX_FMT_HM12,
 	V4L2_PIX_FMT_NV12,
 	V4L2_PIX_FMT_NV21,
 	V4L2_PIX_FMT_YUV420,
@@ -347,6 +347,56 @@ static int vidioc_g_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
+static  u32 get_colorspace(u32 fmt)
+{
+    printk(KERN_ERR "%s(%d): csi1: fmt=%u\n", __func__, __LINE__, fmt);
+    switch(fmt)
+    {
+        case V4L2_PIX_FMT_JPEG:
+            return V4L2_COLORSPACE_JPEG;
+        break;
+        
+        case V4L2_PIX_FMT_SBGGR8:
+	    case V4L2_PIX_FMT_SGBRG8:
+	    case V4L2_PIX_FMT_SGRBG8:
+	    case V4L2_PIX_FMT_SRGGB8:
+	    case V4L2_PIX_FMT_SBGGR10:
+	    case V4L2_PIX_FMT_SGBRG10:
+	    case V4L2_PIX_FMT_SGRBG10:
+	    case V4L2_PIX_FMT_SRGGB10:
+	    case V4L2_PIX_FMT_SBGGR12:
+	    case V4L2_PIX_FMT_SGBRG12:
+	    case V4L2_PIX_FMT_SGRBG12:
+	    case V4L2_PIX_FMT_SRGGB12:
+            return V4L2_COLORSPACE_RAW;
+        break;
+        
+        case V4L2_PIX_FMT_RGB565:
+        case V4L2_PIX_FMT_RGB565X:
+            return V4L2_COLORSPACE_SRGB;
+        break;
+        
+        case V4L2_PIX_FMT_YUYV:
+        case V4L2_PIX_FMT_YVYU:
+        case V4L2_PIX_FMT_UYVY:
+        case V4L2_PIX_FMT_VYUY:
+        case V4L2_PIX_FMT_NV12:
+        case V4L2_PIX_FMT_NV21:
+        case V4L2_PIX_FMT_YUV420:
+        case V4L2_PIX_FMT_YVU420:
+        case V4L2_PIX_FMT_NV16:
+        case V4L2_PIX_FMT_NV61:
+        case V4L2_PIX_FMT_YUV422P:
+            return V4L2_COLORSPACE_REC709;
+        break;
+        default:
+                printk(KERN_ERR "%s(%d): csi1: Unhandled pixfmt %u, defaulting to COLORSPACE_RAW\n", __func__, __LINE__, fmt);
+        break;
+    }
+    
+    return V4L2_COLORSPACE_RAW;
+}
+
 static int sun6i_video_try_fmt(struct sun6i_video *video,
 			       struct v4l2_format *f)
 {
@@ -357,16 +407,19 @@ static int sun6i_video_try_fmt(struct sun6i_video *video,
 		pixfmt->pixelformat = supported_pixformats[0];
 
 	v4l_bound_align_image(&pixfmt->width, MIN_WIDTH, MAX_WIDTH, 1,
-			      &pixfmt->height, MIN_HEIGHT, MAX_WIDTH, 1, 1);
+			      &pixfmt->height, MIN_HEIGHT, MAX_HEIGHT, 1, 1);
 
-	bpp = sun6i_csi_get_bpp(pixfmt->pixelformat);
-	pixfmt->bytesperline = (pixfmt->width * bpp) >> 3;
-	pixfmt->sizeimage = pixfmt->bytesperline * pixfmt->height;
+	//bpp = sun6i_csi_get_bpp(pixfmt->pixelformat);
+	//pixfmt->bytesperline = (pixfmt->width * bpp) >> 3;
+	//pixfmt->sizeimage = pixfmt->bytesperline * pixfmt->height;
 
+    v4l2_fill_pixfmt(pixfmt, pixfmt->pixelformat,
+				 pixfmt->width, pixfmt->height);
+    
 	if (pixfmt->field == V4L2_FIELD_ANY)
 		pixfmt->field = V4L2_FIELD_NONE;
 
-	pixfmt->colorspace = V4L2_COLORSPACE_RAW;
+	pixfmt->colorspace = get_colorspace(pixfmt->pixelformat);
 	pixfmt->ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;
 	pixfmt->quantization = V4L2_QUANTIZATION_DEFAULT;
 	pixfmt->xfer_func = V4L2_XFER_FUNC_DEFAULT;
@@ -474,7 +527,7 @@ static int sun6i_video_open(struct file *file)
 	if (ret < 0)
 		goto unlock;
 
-	ret = v4l2_pipeline_pm_use(&video->vdev.entity, 1);
+	ret = v4l2_pipeline_pm_get(&video->vdev.entity);
 	if (ret < 0)
 		goto fh_release;
 
@@ -507,7 +560,7 @@ static int sun6i_video_close(struct file *file)
 
 	_vb2_fop_release(file, NULL);
 
-	v4l2_pipeline_pm_use(&video->vdev.entity, 0);
+	v4l2_pipeline_pm_put(&video->vdev.entity);
 
 	if (last_fh)
 		sun6i_csi_set_power(video->csi, false);
@@ -648,7 +701,7 @@ int sun6i_video_init(struct sun6i_video *video, struct sun6i_csi *csi,
 	vdev->release		= video_device_release_empty;
 	vdev->fops		= &sun6i_video_fops;
 	vdev->ioctl_ops		= &sun6i_video_ioctl_ops;
-	vdev->vfl_type		= VFL_TYPE_GRABBER;
+	vdev->vfl_type		= VFL_TYPE_VIDEO;
 	vdev->vfl_dir		= VFL_DIR_RX;
 	vdev->v4l2_dev		= &csi->v4l2_dev;
 	vdev->queue		= vidq;
@@ -656,7 +709,7 @@ int sun6i_video_init(struct sun6i_video *video, struct sun6i_csi *csi,
 	vdev->device_caps	= V4L2_CAP_STREAMING | V4L2_CAP_VIDEO_CAPTURE;
 	video_set_drvdata(vdev, video);
 
-	ret = video_register_device(vdev, VFL_TYPE_GRABBER, -1);
+	ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
 	if (ret < 0) {
 		v4l2_err(&csi->v4l2_dev,
 			 "video_register_device failed: %d\n", ret);
